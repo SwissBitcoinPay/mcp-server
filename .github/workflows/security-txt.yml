@@ -1,0 +1,78 @@
+name: security.txt
+
+# Every week, without any change to the repository: the test of .well-known/security.txt
+# (test/security-txt.test.ts), which fails 30 days before its Expires. CI runs it only on a pull
+# request or a push to main, so a quiet repository would let it expire unseen. When it fails, an
+# issue is opened (once: while it is open, the next failures add nothing), so that someone renews
+# Expires a year ahead (SECURITY.md) and ships a release. Run it by hand: Actions → security.txt →
+# Run workflow.
+#
+# GitHub disables a public repository's scheduled workflows after 60 days without activity, and
+# says so by email first: re-enable it then (Actions → security.txt → Enable workflow).
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-txt
+  cancel-in-progress: false
+
+# Its jobs run on GitHub-hosted runners (docs/RELEASING.md, « Where the workflows run »).
+jobs:
+  test:
+    name: Expires, contact and key
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      # From package-lock.json, as in CI: the test runs with Vitest.
+      - run: npm ci
+      - run: npx vitest run test/security-txt.test.ts
+
+  # Runs no code of the repository nor of its dependencies: the only job that may write (issues).
+  alert:
+    name: Open an issue
+    needs: test
+    if: failure()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Open the issue, unless it is open already
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node --input-type=module -e '
+            const api = `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/issues`;
+            const headers = {
+              authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+              accept: "application/vnd.github+json",
+            };
+            const title = "security.txt: the weekly check fails (Expires within 30 days?)";
+            const open = await fetch(`${api}?state=open&per_page=100`, { headers });
+            if (!open.ok) throw new Error(`listing the issues: ${open.status}`);
+            if ((await open.json()).some((issue) => issue.title === title)) process.exit(0);
+            const body = [
+              `The weekly test of .well-known/security.txt failed: ${process.env.RUN_URL}`,
+              "",
+              "If Expires is less than 30 days away: set it a year ahead (SECURITY.md), check the",
+              "OpenPGP key is still the one of security@sattle.me, and ship a release so that the",
+              "hosted server serves it. Close this issue once the workflow passes again.",
+            ].join("\n");
+            const created = await fetch(api, { method: "POST", headers, body: JSON.stringify({ title, body }) });
+            if (!created.ok) throw new Error(`opening the issue: ${created.status}`);
+          '

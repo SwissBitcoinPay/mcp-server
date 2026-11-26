@@ -1,0 +1,151 @@
+name: Release
+
+# Makes a release when main carries a version that has no tag yet and CHANGELOG.md has its section
+# (`npm run version:bump -- <x.y.z>` in a pull request, then merged: docs/RELEASING.md). The checks,
+# the Claude Desktop bundle, then the tag v<version> on that commit and its GitHub release with the
+# bundle and its SHA-256, and the branch `stable` moved to it (render.yaml). Run it again by hand
+# ("Run workflow" on main) after a failure: it releases main if its version is still untagged.
+# Nothing is deployed here, nor from GitHub at all: a maintainer deploys the release from their
+# machine (deploy/deploy.sh … <version>).
+#
+# Only the last job may write to the repository, and it runs no code of the repository nor of its
+# dependencies: the build, which runs npm's packages, has a read-only token.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Its jobs run on GitHub-hosted runners (docs/RELEASING.md, « Where the workflows run »).
+jobs:
+  plan:
+    name: Is there a version to release?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases are made from main, not from $GITHUB_REF."
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node scripts/version.mjs check)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          tagged=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$version" \
+            --jq "[.[] | select(.ref == \"refs/tags/v$version\")] | length")
+          if [[ $tagged != 0 ]]; then
+            echo "v$version is already released: nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif ! node scripts/version.mjs notes "$version" > /dev/null; then
+            echo "CHANGELOG.md has no section for $version: nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Releasing v$version from $GITHUB_SHA."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Checks and bundle
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npm ls --all
+      - run: npm run check
+      # ShellCheck 0.11.0, pinned, the same everywhere (scripts/shellcheck.sh).
+      - run: scripts/shellcheck.sh
+      # The bundle Claude Desktop installs (scripts/bundle.mjs): build/sattleme-assistant-<version>.mcpb.
+      - run: npm run bundle
+      - name: The release's files
+        run: |
+          [[ $(node scripts/version.mjs check) == "$VERSION" ]]
+          mkdir release
+          cp "build/sattleme-assistant-$VERSION.mcpb" release/
+          (cd release && sha256sum -- *.mcpb > SHA256SUMS && cat SHA256SUMS)
+          node scripts/version.mjs notes "$VERSION" > notes.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            release/
+            notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Tag and GitHub release
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+      - name: Publish v${{ needs.plan.outputs.version }}
+        run: |
+          (cd release && sha256sum -c SHA256SUMS)
+          tag="v$VERSION"
+          tagged=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$tag" \
+            --jq "[.[] | select(.ref == \"refs/tags/$tag\")] | length")
+          [[ $tagged == 0 ]] || { echo "::error::$tag was tagged meanwhile."; exit 1; }
+          # A draft left by an attempt that failed half-way (gh publishes only once every file is
+          # uploaded): removed, so the release is made once.
+          for id in $(gh api --paginate "repos/$GH_REPO/releases" \
+            --jq ".[] | select(.draft and .tag_name == \"$tag\") | .id"); do
+            gh api -X DELETE "repos/$GH_REPO/releases/$id"
+          done
+          # The tag is made on the commit the build checked, when the release is published.
+          gh release create "$tag" release/*.mcpb release/SHA256SUMS \
+            --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md
+          # The branch the Deploy to Render button deploys (render.yaml, docs/SELF-HOSTING.md):
+          # moved to the release's commit, forward only (never forced: a refusal stops the job).
+          if gh api "repos/$GH_REPO/git/ref/heads/stable" --silent 2> /dev/null; then
+            gh api -X PATCH "repos/$GH_REPO/git/refs/heads/stable" \
+              -f sha="$GITHUB_SHA" -F force=false --silent
+          else
+            gh api -X POST "repos/$GH_REPO/git/refs" \
+              -f ref=refs/heads/stable -f sha="$GITHUB_SHA" --silent
+          fi
+          url=$(gh release view "$tag" --json url --jq .url)
+          {
+            echo "### Released [$tag]($url)"
+            echo
+            echo "Its bundle and SHA256SUMS are attached."
+            echo
+            echo "To put it on a server, from the repository on your machine"
+            echo "(docs/RELEASING.md): \`deploy/deploy.sh <admin@server> <public-host> $VERSION\`."
+          } >> "$GITHUB_STEP_SUMMARY"

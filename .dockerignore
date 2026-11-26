@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.git
+*.mcpb
+*.tgz
+.env
+.env.*
+deploy
+docs
+test
+.github

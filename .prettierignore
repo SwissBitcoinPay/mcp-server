@@ -1,0 +1,9 @@
+# The pinned copy of the integration specification, unchanged (spec/PIN.json).
+spec/
+# The copy of checkout-node, unchanged (vendor/checkout-node/VENDOR.json).
+vendor/
+node_modules/
+dist/
+*.tgz
+*.mcpb
+build/

@@ -1,0 +1,7 @@
+sattle.me assistant (MCP server)
+Copyright 2026 Swiss Bitcoin Pay Sàrl
+
+This product includes the sattle.me checkout SDK (vendor/checkout-node),
+Copyright 2026 Swiss Bitcoin Pay Sàrl, under the MIT License
+(vendor/checkout-node/LICENSE), and the Plus Jakarta Sans fonts (assets/fonts),
+under the SIL Open Font License 1.1 (assets/fonts/LICENSE-PlusJakartaSans.txt).

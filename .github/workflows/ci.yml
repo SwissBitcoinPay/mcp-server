@@ -1,0 +1,106 @@
+name: CI
+
+# Every pull request and every push to main: the pinned copies (the integrations' specification,
+# checkout-node's code), lint, format, types, tests (against the app's vectors, local relays and
+# fakes: no network) and build, on every supported version of Node and on .nvmrc's, and the
+# deployment scripts (ShellCheck 0.11.0, pinned: scripts/shellcheck.sh); the Claude Desktop bundle,
+# packed and started as a release's (release.yml); the server's Docker image, built and run with
+# Caddy as docs/SELF-HOSTING.md says, then checked over HTTPS.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Its jobs run on GitHub-hosted runners (docs/RELEASING.md, « Where the workflows run »).
+jobs:
+  checks:
+    name: Checks (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json "engines": Node 22 or later: every release line Node.js supports, each at its
+        # latest version (where the bundle and self-hosters run); and .nvmrc's exact version, the
+        # one the hosted server's image (Dockerfile) and the Release workflow run.
+        node: ["22", "24", "26", ".nvmrc"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node != '.nvmrc' && matrix.node || '' }}
+          node-version-file: ${{ matrix.node == '.nvmrc' && '.nvmrc' || '' }}
+      # From package-lock.json, as the hosted server is built.
+      - run: npm ci
+      - run: npm ls --all
+      - run: npm run spec:check
+      - run: npm run vendor:check
+      - run: npm run version:check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # ShellCheck 0.11.0, pinned, the same everywhere (scripts/shellcheck.sh).
+      - run: scripts/shellcheck.sh
+
+  bundle:
+    name: Claude Desktop bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      # Packs the .mcpb as a release does, then starts it as Claude Desktop would (scripts/bundle.mjs).
+      - run: npm run bundle
+
+  docker-compose:
+    name: Docker Compose
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # docs/SELF-HOSTING.md, option A, on localhost: Caddy gives it a certificate of its own local
+      # authority. The secret is made here and thrown away with the runner.
+      - name: Start
+        run: |
+          umask 077
+          {
+            echo "PUBLIC_HOST=localhost"
+            echo "MCP_SEAL_SECRET=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')"
+          } > .env
+          docker compose up -d --build --wait --wait-timeout 180
+      - name: What an AI app sees (scripts/smoke.mjs), over HTTPS
+        run: |
+          ca="$RUNNER_TEMP/caddy-root.crt"
+          for _ in $(seq 30); do
+            docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt "$ca" 2>/dev/null && break
+            sleep 1
+          done
+          NODE_EXTRA_CA_CERTS="$ca" node scripts/smoke.mjs https://localhost
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop
+        if: always()
+        run: docker compose down

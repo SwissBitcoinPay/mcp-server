@@ -1,0 +1,77 @@
+{
+  "manifest_version": "0.3",
+  "name": "sattleme-assistant",
+  "display_name": "sattle.me",
+  "icon": "assets/icon.png",
+  "version": "1.0.0",
+  "description": "Makes your sattle.me invoices (numbered, with VAT, a PDF and a Bitcoin payment link) and tells whether they were paid.",
+  "long_description": "The sattle.me assistant makes your business's invoices with the key you create for it in the sattle.me app (Intégrations › Créer une intégration › Assistant IA): numbered in your one series, with their VAT, a PDF and a payment link your clients pay in bitcoin, until their due date. It tells whether an invoice was paid as soon as the payments prove it.\n\nThe key never spends: every invoice pays your own wallet. It stays on this computer. Remove the assistant in the app to stop it at once.",
+  "author": {
+    "name": "sattle.me",
+    "url": "https://sattle.me"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sattleme/mcp-server.git"
+  },
+  "homepage": "https://github.com/sattleme/mcp-server#readme",
+  "support": "https://github.com/sattleme/mcp-server/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/src/stdio.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/src/stdio.js"],
+      "env": {
+        "SATTLEME_ASSISTANT_KEY": "${user_config.assistant_key}",
+        "SATTLEME_PDF_DIRECTORY": "${user_config.pdf_directory}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "business_profile",
+      "description": "Your business as its invoices print it, today's date and the due dates allowed."
+    },
+    {
+      "name": "preview_invoice",
+      "description": "Checks an invoice and computes its totals, without making it."
+    },
+    {
+      "name": "create_invoice",
+      "description": "Makes the invoice the user asked for: its number, its payment link."
+    },
+    { "name": "list_invoices", "description": "The invoices the assistant made." },
+    { "name": "invoice_status", "description": "Whether an invoice was paid." },
+    { "name": "invoice_pdf", "description": "An invoice as a PDF, with its QR code." },
+    {
+      "name": "invoice_card_pdf",
+      "description": "The invoice card's own tool: saves an invoice's PDF on your device."
+    },
+    {
+      "name": "export_transactions",
+      "description": "Your transactions of a period for your accountant, as the app exports them (CSV or PDF), once you allowed it in the app."
+    }
+  ],
+  "keywords": ["invoice", "bitcoin", "lightning", "sattle.me", "billing"],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=22.0.0" }
+  },
+  "user_config": {
+    "assistant_key": {
+      "type": "string",
+      "title": "Assistant key",
+      "description": "The key the sattle.me app gave when you created the assistant (sattleme_ak_…). Kept in your computer's secret store.",
+      "sensitive": true,
+      "required": true
+    },
+    "pdf_directory": {
+      "type": "directory",
+      "title": "Folder for exports and invoices",
+      "description": "Where the invoices' PDFs and the exports are saved.\nEmpty: they are only shown in the conversation.",
+      "required": false
+    }
+  }
+}

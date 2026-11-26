@@ -1,0 +1,25 @@
+# TLS certificates are obtained and renewed automatically for PUBLIC_HOST (ports 80 and 443).
+# No `log` directive on purpose: no access log. A request's URL holds OAuth values, its
+# Authorization header a token sealing the merchant's assistant key, the consent's body the key.
+{$PUBLIC_HOST} {
+	# The consent page is where the key is pasted: browsers keep to HTTPS for this host.
+	header Strict-Transport-Security "max-age=31536000"
+	# Who to write to about a vulnerability (RFC 9116, SECURITY.md): the release's
+	# .well-known/security.txt and the OpenPGP key it names, mounted read-only (docker-compose.yml),
+	# served as text/plain.
+	@security path /.well-known/security.txt /.well-known/pgp-key.txt
+	handle @security {
+		root * /srv
+		file_server
+	}
+	handle {
+		# Answers stream as they come (text/event-stream is flushed at once, Caddy's default).
+		reverse_proxy mcp:8080
+	}
+	# While the assistant is down (restart, update): a bare OAuth-shaped error. Handled here, the
+	# proxy error is not written to Caddy's log with the request it failed.
+	handle_errors {
+		header Content-Type application/json
+		respond `{"error":"temporarily_unavailable"}` {err.status_code}
+	}
+}

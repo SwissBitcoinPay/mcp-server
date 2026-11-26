@@ -1,0 +1,566 @@
+<!doctype html>
+<!--
+  The invoice card's page (src/mcp/card.ts). scripts/ui.mjs puts the logo and the script in it and
+  writes dist/ui/invoice-card.html. Nothing is loaded from elsewhere: the AI app's content security
+  policy for an app that declares no domain allows inline scripts, inline styles and data: images
+  only (no font-src: a font file, even inline, is refused, so the card names the brand's fonts and
+  falls back to the AI app's).
+
+  It is drawn as the merchant's app (sattle.me, sattleme/app: src/theme/tokens.ts and
+  src/components/ui/), which follows the « Swiss Bitcoin Pay » design system but for the ink and the
+  font of the sattle.me brand kit:
+  - light: the app's tokens, whatever the AI app's colours: cream, white and sand, ink text, orange
+    as a fill only (readable accent: umber), the payment states' colours;
+  - dark (the design system has no dark theme, so the card follows the AI app's theme): the AI
+    app's colours (its variables, else fallbacks), with the brand's fills;
+  - every button a pill in a ring of its own (the one filled one orange, white label), fields as
+    the app's TextField, the PDF's button and its language as its DocumentLanguageButton (one
+    filled button split by a thin line), notices as its Callout.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>sattle.me</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        /* The brand's fills, in both themes. */
+        --orange: #f7931a;
+        --orange-pressed: #e08414;
+        --umber: #8f5300;
+        /* Light: the app's tokens (src/theme/tokens.ts). */
+        --text: #0b1a33;
+        --muted: #6e675e;
+        --line: rgba(11, 26, 51, 0.14);
+        --line-hover: rgba(11, 26, 51, 0.35);
+        --surface: #ffffff;
+        --subtle: #f2ece0;
+        --accent-text: #8f5300;
+        --accent-text-hover: #5e3600;
+        --accent-text-active: #3c2200;
+        --link-decoration: none;
+        --secondary-hover: #fbf8f2;
+        --secondary-active: #f7f2e9;
+        --secondary-highlight: inset 0 1px 0 0 #ffffff;
+        --lift: 0 1px 2px 0 rgba(11, 26, 51, 0.07);
+        --press-light: inset 0 2px 4px 0 rgba(11, 26, 51, 0.12);
+        --secondary-label-shadow: 0 1px 0 #ffffff;
+        --halo: #f5e7d2;
+        --focus-ring: #8f5300;
+        --draft: #6e675e;
+        --draft-bg: #f2ece0;
+        --success: #1f6b45;
+        --success-bg: #dcede2;
+        --warning: #7a5a00;
+        --warning-bg: #f5ebcb;
+        --danger: #8c2f26;
+        --danger-bg: #f5deda;
+        /* The brand kit's fonts where the device has them, else the AI app's (see above). */
+        --sans:
+          "Plus Jakarta Sans",
+          var(
+            --font-sans,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            Roboto,
+            Helvetica,
+            Arial,
+            sans-serif
+          );
+        --mono:
+          "JetBrains Mono", var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+      }
+      /*
+       * Dark: the AI app's texts and lines (its variables, else fallbacks); fills are veils of white,
+       * seen on whatever dark the AI app draws under the card. The same list twice: the theme the
+       * AI app tells, else the device's.
+       */
+      :root[data-theme="dark"] {
+        --text: var(--color-text-primary, #faf9f5);
+        --muted: var(--color-text-secondary, #b8b3a8);
+        --line: var(--color-border-primary, rgba(222, 220, 209, 0.3));
+        --line-hover: rgba(250, 249, 245, 0.5);
+        --surface: rgba(250, 249, 245, 0.06);
+        --subtle: rgba(250, 249, 245, 0.1);
+        --accent-text: var(--color-text-primary, #faf9f5);
+        --accent-text-hover: var(--color-text-secondary, #b8b3a8);
+        --accent-text-active: var(--color-text-secondary, #b8b3a8);
+        --link-decoration: underline;
+        --secondary-hover: rgba(250, 249, 245, 0.1);
+        --secondary-active: rgba(250, 249, 245, 0.14);
+        --secondary-highlight: inset 0 0 0 0 transparent;
+        --lift: 0 0 0 0 transparent;
+        --press-light: inset 0 2px 4px 0 rgba(0, 0, 0, 0.35);
+        --secondary-label-shadow: none;
+        --halo: rgba(247, 147, 26, 0.35);
+        --focus-ring: var(--color-ring-primary, #f7931a);
+        --draft: var(--color-text-secondary, #b8b3a8);
+        --draft-bg: rgba(250, 249, 245, 0.1);
+        --success: var(--color-text-success, #9fd8b6);
+        --success-bg: var(--color-background-success, #1d3a2b);
+        --warning: var(--color-text-warning, #f0d58a);
+        --warning-bg: var(--color-background-warning, #3a3018);
+        --danger: var(--color-text-danger, #f2a69b);
+        --danger-bg: var(--color-background-danger, #3d2420);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --text: var(--color-text-primary, #faf9f5);
+          --muted: var(--color-text-secondary, #b8b3a8);
+          --line: var(--color-border-primary, rgba(222, 220, 209, 0.3));
+          --line-hover: rgba(250, 249, 245, 0.5);
+          --surface: rgba(250, 249, 245, 0.06);
+          --subtle: rgba(250, 249, 245, 0.1);
+          --accent-text: var(--color-text-primary, #faf9f5);
+          --accent-text-hover: var(--color-text-secondary, #b8b3a8);
+          --accent-text-active: var(--color-text-secondary, #b8b3a8);
+          --link-decoration: underline;
+          --secondary-hover: rgba(250, 249, 245, 0.1);
+          --secondary-active: rgba(250, 249, 245, 0.14);
+          --secondary-highlight: inset 0 0 0 0 transparent;
+          --lift: 0 0 0 0 transparent;
+          --press-light: inset 0 2px 4px 0 rgba(0, 0, 0, 0.35);
+          --secondary-label-shadow: none;
+          --halo: rgba(247, 147, 26, 0.35);
+          --focus-ring: var(--color-ring-primary, #f7931a);
+          --draft: var(--color-text-secondary, #b8b3a8);
+          --draft-bg: rgba(250, 249, 245, 0.1);
+          --success: var(--color-text-success, #9fd8b6);
+          --success-bg: var(--color-background-success, #1d3a2b);
+          --warning: var(--color-text-warning, #f0d58a);
+          --warning-bg: var(--color-background-warning, #3a3018);
+          --danger: var(--color-text-danger, #f2a69b);
+          --danger-bg: var(--color-background-danger, #3d2420);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15px;
+        font-weight: 500;
+        line-height: 1.5;
+      }
+      #card {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        max-width: 640px;
+      }
+      p {
+        margin: 0;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      .logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: center / cover no-repeat url("__LOGO__");
+      }
+      .title {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      /* The app's StatusPill (size sm): a draft until made, then done. */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        margin-left: auto;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: var(--draft-bg);
+        color: var(--draft);
+        font-size: 13.5px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .badge.done {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .label {
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .recipient {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .recipient strong {
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .lines {
+        list-style: none;
+        margin: 0;
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .lines li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .line-name {
+        overflow-wrap: anywhere;
+      }
+      .line-price {
+        color: var(--muted);
+        font-size: 13.5px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .totals {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 12px;
+        margin: 0;
+      }
+      .totals dt {
+        color: var(--muted);
+      }
+      .totals dd {
+        margin: 0;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+      .details {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 12px;
+        margin: 0;
+        font-size: 13.5px;
+      }
+      .details dt {
+        color: var(--muted);
+      }
+      .details dd {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .totals .strong {
+        color: var(--text);
+        font-weight: 700;
+        font-size: 16px;
+      }
+      .due strong {
+        font-weight: 700;
+      }
+      .made-title {
+        font-weight: 700;
+        font-size: 19px;
+        letter-spacing: -0.02em;
+      }
+      .link-line {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      /* Copied, so set as the app sets what is copied: in mono. */
+      .url {
+        overflow-wrap: anywhere;
+        user-select: all;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 400;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      /* The app's Callout: what is missing. */
+      .callout {
+        padding: 16px;
+        border-radius: 16px;
+        background: var(--warning-bg);
+        color: var(--warning);
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      /* The app's Callout, its error tone: its first line the title. */
+      .error {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 16px;
+        border-radius: 16px;
+        background: var(--danger-bg);
+        color: var(--danger);
+        font-size: 13.5px;
+      }
+      p.error,
+      .error > p:first-child {
+        font-size: 14.5px;
+        font-weight: 700;
+      }
+      .error .muted {
+        color: inherit;
+      }
+      .form {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px 16px;
+      }
+      /* The app's TextField. */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .field label {
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .field input {
+        height: 56px;
+        padding: 0 18px;
+        border: 1.5px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+        font-weight: 700;
+        transition:
+          border-color 140ms ease,
+          box-shadow 140ms ease;
+      }
+      .field input[name="country"] {
+        text-transform: uppercase;
+      }
+      /* Missing: told by the border's width too, not by its colour alone. */
+      .field.missing input {
+        padding: 0 17.5px;
+        border-width: 2px;
+        border-color: var(--danger);
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      /* The app's Button (size md, as beside the invoice on a desktop): a pill in its own ring. */
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 56px;
+        padding: 9px 26px;
+        border: 1.5px solid transparent;
+        border-radius: 999px;
+        font: inherit;
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        text-align: center;
+        cursor: pointer;
+        transition:
+          background-color 140ms ease,
+          border-color 140ms ease,
+          box-shadow 140ms ease,
+          color 140ms ease;
+      }
+      /* The one filled button: white on orange, held by its umber ring and the label's shadow. */
+      .button.primary {
+        background: var(--orange);
+        border-color: var(--umber);
+        color: #ffffff;
+        text-shadow: 0 1px 0 rgba(143, 83, 0, 0.55);
+        box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+      }
+      .button.primary:hover:not(:disabled) {
+        background: var(--orange-pressed);
+      }
+      .button.primary:active:not(:disabled) {
+        background: var(--orange-pressed);
+        box-shadow: inset 0 2px 4px 0 rgba(143, 83, 0, 0.4);
+      }
+      .button.secondary {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--text);
+        text-shadow: var(--secondary-label-shadow);
+        box-shadow: var(--secondary-highlight), var(--lift);
+      }
+      .button.secondary:hover:not(:disabled) {
+        background: var(--secondary-hover);
+        border-color: var(--line-hover);
+      }
+      .button.secondary:active:not(:disabled) {
+        background: var(--secondary-active);
+        box-shadow: var(--press-light);
+      }
+      /* Disabled: a sand fill, never a lower opacity. */
+      .button:disabled {
+        cursor: default;
+        background: var(--subtle);
+        border-color: transparent;
+        color: var(--muted);
+        text-shadow: none;
+        box-shadow: none;
+      }
+      /*
+       * The PDF's button and its language at its end: one filled button split by a thin line of its
+       * ring (the app's DocumentLanguageButton).
+       * The button draws the fill, the ring and the highlight; each part its own hover and press,
+       * in the button's shape at its end; the language in the label's type, before a chevron.
+       */
+      .split {
+        display: inline-flex;
+        align-items: stretch;
+        max-width: 100%;
+        min-height: 56px;
+        border: 1.5px solid var(--umber);
+        border-radius: 999px;
+        background: var(--orange);
+        box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+      }
+      .split .button.primary {
+        min-height: 0;
+        padding: 9px 20px 9px 26px;
+        border: 0;
+        border-radius: 999px 0 0 999px;
+        background: transparent;
+        box-shadow: none;
+      }
+      .split .button.primary:hover:not(:disabled),
+      .split-choice:hover {
+        background: var(--orange-pressed);
+      }
+      .split .button.primary:active:not(:disabled),
+      .split-choice:active {
+        background: var(--orange-pressed);
+        box-shadow: inset 0 2px 4px 0 rgba(143, 83, 0, 0.4);
+      }
+      .split-line {
+        flex: none;
+        align-self: center;
+        width: 1px;
+        height: 24px;
+        background: rgba(143, 83, 0, 0.5);
+      }
+      .split-choice {
+        position: relative;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-width: 56px;
+        padding: 0 20px 0 14px;
+        border-radius: 0 999px 999px 0;
+        color: #ffffff;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        text-shadow: 0 1px 0 rgba(143, 83, 0, 0.55);
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+          background-color 140ms ease,
+          box-shadow 140ms ease;
+      }
+      .split-chevron {
+        width: 6px;
+        height: 6px;
+        margin-top: -3px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+      }
+      /* The browser's list, over the whole part, unseen: a tap or a click anywhere opens it. */
+      .split-choice select {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        font: inherit;
+      }
+      /* The app's text button: no fill, no ring, its label the readable accent (umber). */
+      .link {
+        min-height: 44px;
+        margin-right: -12px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 999px;
+        background: none;
+        color: var(--accent-text);
+        font: inherit;
+        font-size: 14.5px;
+        font-weight: 700;
+        text-decoration: var(--link-decoration);
+        cursor: pointer;
+        transition: color 140ms ease;
+      }
+      .link:hover {
+        color: var(--accent-text-hover);
+      }
+      .link:active {
+        color: var(--accent-text-active);
+      }
+      /*
+       * Focus: the design system's orange border in an apricot halo, and around it a ring readable
+       * on any ground (umber, orange in dark), an outline, which forced colours keep.
+       */
+      .button:focus-visible,
+      .field input:focus-visible {
+        border-color: var(--orange);
+      }
+      .button:focus-visible,
+      .link:focus-visible,
+      .field input:focus-visible,
+      .split-choice:focus-within {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px var(--halo);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="card" aria-live="polite"></main>
+    __SCRIPT__
+  </body>
+</html>

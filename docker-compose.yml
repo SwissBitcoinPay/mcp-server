@@ -1,0 +1,53 @@
+# Two containers: Caddy (TLS for PUBLIC_HOST) in front of the hosted assistant (docs/HOSTING.md).
+# Its one secret, MCP_SEAL_SECRET, comes from the environment file given to `docker compose`
+# (deploy/server-setup.sh: /etc/sattleme-mcp/mcp.env, readable by root only), never from git.
+services:
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST in the environment file}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.well-known/security.txt:/srv/.well-known/security.txt:ro
+      - ./.well-known/pgp-key.txt:/srv/.well-known/pgp-key.txt:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - mcp
+
+  mcp:
+    build: .
+    restart: unless-stopped
+    # One container, never more (`--scale`, replicas): invoices are made one at a time per key
+    # within one process (SPEC.md §17).
+    environment:
+      MCP_PUBLIC_URL: https://${PUBLIC_HOST:?set PUBLIC_HOST in the environment file}
+      MCP_SEAL_SECRET: ${MCP_SEAL_SECRET:?set MCP_SEAL_SECRET in the environment file}
+      PORT: "8080"
+      # Caddy is the one hop before it: its X-Forwarded-For holds the client's address (Caddy
+      # ignores the one a client sends). The port is not published: only Caddy reaches it.
+      MCP_TRUST_PROXY: "1"
+      MCP_TIME_ZONE: ${MCP_TIME_ZONE:-Europe/Zurich}
+      MCP_LANGUAGE: ${MCP_LANGUAGE:-fr}
+      MCP_ALLOWED_REDIRECTS: ${MCP_ALLOWED_REDIRECTS:-}
+    # A stop lets the requests in flight finish (src/http.ts): an invoice is made in seconds, each
+    # of its calls to a relay or a service given 10 s at most.
+    stop_grace_period: 60s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  caddy_data:
+  caddy_config:

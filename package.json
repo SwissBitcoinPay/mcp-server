@@ -1,0 +1,61 @@
+{
+  "name": "@sattleme/mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The sattle.me assistant: an MCP server that makes a merchant's invoices (numbered, with VAT, a payment link and a PDF) and follows their payment, in Claude Desktop or hosted on mcp.sattle.me.",
+  "license": "Apache-2.0",
+  "author": "sattle.me (https://sattle.me)",
+  "homepage": "https://github.com/sattleme/mcp-server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sattleme/mcp-server.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/ui.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p ui",
+    "test": "vitest run",
+    "spec:check": "node scripts/spec.mjs check",
+    "vendor:check": "node scripts/vendor.mjs check",
+    "version:check": "node scripts/version.mjs check",
+    "version:bump": "node scripts/version.mjs bump",
+    "check": "npm run spec:check && npm run vendor:check && npm run version:check && npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
+    "bundle": "node scripts/bundle.mjs",
+    "start:http": "node dist/src/http.js",
+    "start:stdio": "node dist/src/stdio.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "express": "5.3.0",
+    "express-rate-limit": "8.7.1",
+    "i18n-iso-countries": "7.14.0",
+    "pdfkit": "0.20.2",
+    "qrcode-generator": "2.0.4",
+    "undici": "8.12.4",
+    "ws": "8.21.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.5",
+    "@types/pdfkit": "0.17.7",
+    "@types/ws": "8.18.1",
+    "eslint": "10.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}
